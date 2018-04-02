@@ -1,0 +1,199 @@
+<?php
+require_once 'vendor/autoload.php';
+
+use DeviceDetector\DeviceDetector;
+use DeviceDetector\Parser\Device\DeviceParserAbstract;
+
+// OPTIONAL: Set version truncation to none, so full versions will be returned
+// By default only minor versions will be returned (e.g. X.Y)
+// for other options see VERSION_TRUNCATION_* constants in DeviceParserAbstract class
+// DeviceParserAbstract::setVersionTruncation(DeviceParserAbstract::VERSION_TRUNCATION_NONE);
+
+// for mac opened files
+ini_set('auto_detect_line_endings',TRUE);
+
+
+class processCSV {
+    public $filename,
+           $filePath,
+           $handle,
+           $newCSV,
+           $colMap,
+           $data,
+           $device,
+           $browser;
+
+    public function __construct($directory) {
+        $startTime = microtime(true);
+        $this->directory = $directory;
+        $this->filePath = '/Users/jj/Dropbox/mamp/sites/user-agent-csv/csv/original/'.$fileName.'.csv';
+        $this->handle = fopen($this->filePath, 'r');
+        $this->colMap = false;
+        if($this->handle !== false) {
+            $time = $_SERVER['REQUEST_TIME'];
+            var_dump($time);
+            $newCSVFilename = $fileName.'-processed-'.$time;
+            echo $newCSVFilename.'<br/>';
+            $this->newCSV = fopen('/Users/jj/Dropbox/mamp/sites/user-agent-csv/csv/processed/'.$newCSVFilename.'.csv', 'w');
+            $this->buildCSV();
+
+            // close our files
+            fclose($this->newCSV);
+            fclose($this->handle);
+            $elapsedTime = microtime(true) - $startTime;
+            echo '<strong>'.$this->fileName .'</strong> processed into <strong>'.$newCSVFilename.'</strong> in '.(string) $elapsedTime.'s';
+        }
+
+
+    }
+
+    protected function buildCSV() {
+        // what column is the user agent data in???
+        while (($data = fgetcsv($this->handle, 20000, ",")) !== FALSE) {
+
+            // PROCESS FIRST ROW AND SET HEADER ROW
+            if($this->colMap === false) {
+                // first row will be the column headers, so we need to locate the user agent column
+
+                foreach($data as $index => $column) {
+                    $this->colMap[$column] = $index;
+                }
+                // add in our new columns
+                $newCols = ['os', 'device', 'device_brand', 'device_model', 'browser_type', 'browser_name', 'browser_version'];
+
+                foreach($newCols as $colName) {
+                    $this->colMap[$colName] = count($this->colMap);
+                }
+
+                // write the first line
+                $this->writeHeaderRow();
+                continue;
+            }
+
+
+
+            $dd = new DeviceDetector($data[$this->colMap['browser']]);
+            // If called, getBot() will only return true if a bot was detected  (speeds up detection a bit)
+            $dd->discardBotInformation();
+            $dd->parse();
+
+            if ($dd->isBot()) {
+                // discard row
+                continue;
+            }
+
+            // get device and browser info
+            $client = $dd->getClient(); // holds information about browser, feed reader, media player, ...
+            $osInfo = $dd->getOs();
+            $device = $dd->getDeviceName();
+            $brand = $dd->getBrandName();
+            $model = $dd->getModel();
+
+
+            // Map to new order
+            $csvRow = [
+                'link_title' => $data[$this->colMap['link_title']],
+                'link_layout' => $data[$this->colMap['link_layout']],
+                'link_location' => $data[$this->colMap['link_location']],
+                'content_type' => $data[$this->colMap['content_type']],
+                'link_count' => $data[$this->colMap['link_count']],
+                'link_clicked' => $data[$this->colMap['link_clicked']],
+                'clicked' => $data[$this->colMap['clicked']],
+                'os' => (isset($osInfo['name']) ? $osInfo['name'] : '') . (isset($osInfo['version']) ? ' '.$osInfo['version']: ''),
+                'device' => ucfirst($device),
+                'device_brand' => $brand,
+                'device_model' => $model,
+                'browser_type' => $client['type'],
+                'browser_name' => $client['name'],
+                'browser_version' => $client['version'],
+                'site' => $data[$this->colMap['site']],
+                'page_url' => $data[$this->colMap['page_url']],
+                'referrer' => $data[$this->colMap['referrer']],
+                'paragraphs' => $data[$this->colMap['paragraphs']],
+                'displayed_url_1' => $data[$this->colMap['displayed_url_1']],
+                'displayed_url_2' => $data[$this->colMap['displayed_url_2']],
+                'displayed_url_3' => $data[$this->colMap['displayed_url_3']],
+                'displayed_url_4' => $data[$this->colMap['displayed_url_4']],
+                'displayed_url_5' => $data[$this->colMap['displayed_url_5']],
+                'time_logged' => $data[$this->colMap['time_logged']],
+                'time_updated' => $data[$this->colMap['time_updated']],
+                'user_id' => $data[$this->colMap['user_id']],
+                'browser' => $data[$this->colMap['browser']],
+                'row' => $data[$this->colMap['row']]
+            ];
+
+            // write to the CSV
+            $this->writeRow($csvRow);
+        }
+
+    }
+
+
+    /**
+    * Writes a row to the CSV
+    * @param $data ARRAY of data to write.
+    */
+    public function writeRow($data) {
+        $headers = $this->getCSVHeaderRow();
+        $rowData = [];
+        // maps the data to match the row header order
+        foreach($headers as $colName) {
+            $rowData[] = $data[$colName];
+        }
+
+        // write the CSV
+        fputcsv($this->newCSV, $rowData);
+    }
+
+    /**
+    * Writes the header row to the CSV
+    */
+    public function writeHeaderRow() {
+        $headers = $this->getCSVHeaderRow();
+
+        // write to the CSV
+        fputcsv($this->newCSV, $headers);
+    }
+
+    // Outputs our header row in the order it will eventually be mapped to
+    public function getCSVHeaderRow() {
+        return [
+            'link_title',
+            'link_layout',
+            'link_location',
+            'content_type',
+            'link_count',
+            'link_clicked',
+            'clicked',
+            'os',
+            'device',
+            'device_brand',
+            'device_model',
+            'browser_type',
+            'browser_name',
+            'browser_version',
+            'site',
+            'page_url',
+            'referrer',
+            'paragraphs',
+            'displayed_url_1',
+            'displayed_url_2',
+            'displayed_url_3',
+            'displayed_url_4',
+            'displayed_url_5',
+            'time_logged',
+            'time_updated',
+            'user_id',
+            'browser',
+            'row'
+        ];
+    }
+}
+
+
+// run the class
+new processCSV('engaging_news_039_50a773ef-5a1b-416d-be3b-001dbe4f3761');
+
+
+
+
