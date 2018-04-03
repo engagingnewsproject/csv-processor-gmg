@@ -1,6 +1,6 @@
 <?php
 require_once 'vendor/autoload.php';
-
+ini_set('memory_limit', -1);
 use DeviceDetector\DeviceDetector;
 use DeviceDetector\Parser\Device\DeviceParserAbstract;
 
@@ -57,7 +57,7 @@ class processCSV {
                 $newFile = $this->serverRequestTime.'-processed-'.$file;
                 $this->newCSV = fopen('/Users/jj/Dropbox/mamp/sites/user-agent-csv/csv/processed/'.$newFile, 'w');
 
-                echo "Processing $newFile\n";
+                echo "Processing $newFile";
 
                 $this->buildCSV();
 
@@ -65,7 +65,7 @@ class processCSV {
                 fclose($this->newCSV);
                 fclose($this->handle);
                 $elapsedTime = microtime(true) - $fileStart;
-                echo "$file processed into $newFile in ".(string) $elapsedTime."s\n";
+                echo "\n$file processed into $newFile in ".(string) $elapsedTime."s\n";
             }
         }
         $this->outputData();
@@ -164,8 +164,8 @@ class processCSV {
             // increase total row count
             $this->rows++;
             // output to console to keep track of our process
-            if($this->rows % 10000 === 0) {
-                echo $this->rows. " rows processed\n";
+            if($this->rows % 1000 === 0) {
+                echo ".";
             }
             // increase other stats
             $this->addStats($csvRow);
@@ -278,7 +278,7 @@ class processCSV {
 
 
 // run the class
-new processCSV('/Users/jj/Dropbox/mamp/sites/user-agent-csv/csv/bigTest/');
+new processCSV('/Users/jj/Dropbox/mamp/sites/user-agent-csv/csv/cme/');
 
 
 
