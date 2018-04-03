@@ -14,36 +14,63 @@ ini_set('auto_detect_line_endings',TRUE);
 
 
 class processCSV {
-    public $filename,
+    public $bots = 0,
+           $rows = 0,
+           $repeatUsers = 0,
+           $users = [],
+           $stats = [
+                'link_title'    => [],
+                'link_layout'   => [],
+                'link_location' => [],
+                'content_type'  => [],
+                'link_count'    => [],
+                'clicked'  => 0
+           ],
+           $filename,
            $filePath,
            $handle,
            $newCSV,
            $colMap,
-           $data,
            $device,
            $browser;
 
     public function __construct($directory) {
         $startTime = microtime(true);
         $this->directory = $directory;
-        $this->filePath = '/Users/jj/Dropbox/mamp/sites/user-agent-csv/csv/original/'.$fileName.'.csv';
-        $this->handle = fopen($this->filePath, 'r');
-        $this->colMap = false;
-        if($this->handle !== false) {
-            $time = $_SERVER['REQUEST_TIME'];
-            var_dump($time);
-            $newCSVFilename = $fileName.'-processed-'.$time;
-            echo $newCSVFilename.'<br/>';
-            $this->newCSV = fopen('/Users/jj/Dropbox/mamp/sites/user-agent-csv/csv/processed/'.$newCSVFilename.'.csv', 'w');
-            $this->buildCSV();
+        $this->timeStarted = microtime(true);
+        $this->serverRequestTime = $_SERVER['REQUEST_TIME'];
 
-            // close our files
-            fclose($this->newCSV);
-            fclose($this->handle);
-            $elapsedTime = microtime(true) - $startTime;
-            echo '<strong>'.$this->fileName .'</strong> processed into <strong>'.$newCSVFilename.'</strong> in '.(string) $elapsedTime.'s';
+        $files = array_diff(scandir($directory), array('.', '..'));
+        // foreach file in directory
+        foreach($files as $file) {
+            // check if it's a CSV
+            if(strpos($file, '.csv') === false ) {
+                continue;
+            }
+
+            $fileStart = microtime(true);
+            $filePath = $this->directory.$file;
+            $this->handle = fopen($filePath, 'r');
+            $this->colMap = false;
+
+            if($this->handle !== false) {
+                $newFile = $this->serverRequestTime.'-processed-'.$file;
+                $this->newCSV = fopen('/Users/jj/Dropbox/mamp/sites/user-agent-csv/csv/processed/'.$newFile, 'w');
+
+                echo "Processing $newFile\n";
+
+                $this->buildCSV();
+
+                // close our files
+                fclose($this->newCSV);
+                fclose($this->handle);
+                $elapsedTime = microtime(true) - $fileStart;
+                echo "$file processed into $newFile in ".(string) $elapsedTime."s\n";
+            }
         }
-
+        $this->outputData();
+        $elapsedTime = microtime(true) - $this->timeStarted;
+        echo "\nAll files processed in ".(string) $elapsedTime."s\n";
 
     }
 
@@ -70,6 +97,15 @@ class processCSV {
                 continue;
             }
 
+            // check if we already have this user
+            /*
+            if(!empty($data[$this->colMap['user_id']]) && in_array($data[$this->colMap['user_id']], $this->users, true)) {
+                // skip it because we only want the first entry from each user
+                $this->repeatUsers++;
+                continue;
+            }
+            $this->users[] = $data[$this->colMap['user_id']];
+            */
 
 
             $dd = new DeviceDetector($data[$this->colMap['browser']]);
@@ -78,6 +114,8 @@ class processCSV {
             $dd->parse();
 
             if ($dd->isBot()) {
+                // increse bot count
+                $this->bots++;
                 // discard row
                 continue;
             }
@@ -122,6 +160,15 @@ class processCSV {
                 'row' => $data[$this->colMap['row']]
             ];
 
+
+            // increase total row count
+            $this->rows++;
+            // output to console to keep track of our process
+            if($this->rows % 10000 === 0) {
+                echo $this->rows. " rows processed\n";
+            }
+            // increase other stats
+            $this->addStats($csvRow);
             // write to the CSV
             $this->writeRow($csvRow);
         }
@@ -188,11 +235,50 @@ class processCSV {
             'row'
         ];
     }
+    public function addStats($row) {
+        $this->increaseStats('link_title', $row);
+        $this->increaseStats('link_layout', $row);
+        $this->increaseStats('link_location', $row);
+        $this->increaseStats('content_type', $row);
+        $this->increaseStats('link_count', $row);
+        if($row['clicked'] == 1) $this->stats['clicked']++;
+    }
+
+    public function increaseStats($name, $row) {
+        if(empty($name) || !isset($this->stats[$name][$row[$name]]) && empty($row[$name])) {
+            return;
+        }
+
+        if(!isset($this->stats[$name][$row[$name]])) {
+            $this->stats[$name][$row[$name]] = 1;
+        } elseif(!empty($row[$name])) {
+            $this->stats[$name][$row[$name]]++;
+        }
+    }
+
+    public function outputData() {
+        echo "\n\nBot Rows Deleted: $this->bots\n";
+        echo "Duplicate User Rows: $this->repeatUsers\n";
+        echo "Total Rows: $this->rows\n";
+
+        $this->outputStats($this->stats);
+    }
+
+    public function outputStats($stats) {
+        foreach($stats as $key => $val) {
+            if(is_array($val)) {
+                echo "\n$key\n";
+                $this->outputStats($val);
+            } else {
+                echo "$key: $val\n";
+            }
+        }
+    }
 }
 
 
 // run the class
-new processCSV('engaging_news_039_50a773ef-5a1b-416d-be3b-001dbe4f3761');
+new processCSV('/Users/jj/Dropbox/mamp/sites/user-agent-csv/csv/bigTest/');
 
 
 
